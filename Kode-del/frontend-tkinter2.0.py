@@ -33,6 +33,66 @@ tables = {
         "fields": ["fornavn", "etternavn", "fag", "alder"],
         "insert_query": "INSERT INTO laerer (fornavn, etternavn, fag, alder) VALUES (%s, %s, %s, %s)",
         "select_query": "SELECT * FROM laerer"
+    },
+    "elever": {
+        "fields": ["fornavn", "etternavn", "trinn", "fodselsdato"],
+        "insert_query": "INSERT INTO elever (fornavn, etternavn, trinn, fodselsdato) VALUES (%s, %s, %s, %s)",
+        "select_query": "SELECT * FROM elever"
+    },
+    "fag": {
+        "fields": ["fag_navn"],
+        "insert_query": "INSERT INTO fag (fag_navn) VALUES (%s)",
+        "select_query": "SELECT * FROM fag"
+    },
+    "elev_fag": {
+        "fields": ["fornavn", "etternavn", "fag_navn", "karakter"],
+        "insert_query": "INSERT INTO elev_fag (fornavn, etternavn, fag_navn, karakter) VALUES (%s, %s, %s, %s)",
+        "select_query": "SELECT * FROM elev_fag"
+    },
+    "oppgaver": {
+        "fields": ["fornavn", "etternavn", "oppgave_tekst", "fag_navn"],
+        "insert_query": "INSERT INTO oppgaver (fornavn, etternavn, oppgave_tekst, fag_navn) VALUES (%s, %s, %s, %s)",
+        "select_query": "SELECT * FROM oppgaver"
+    },
+    "fravaer": {
+        "fields": ["fornavn", "etternavn", "dato", "antall_timer"],
+        "insert_query": "INSERT INTO fravaer (fornavn, etternavn, dato, antall_timer) VALUES (%s, %s, %s, %s)",
+        "select_query": "SELECT * FROM fravaer"
+    },
+    "klasse": {
+        "fields": ["klasse_navn"],
+        "insert_query": "INSERT INTO klasse (klasse_navn) VALUES (%s)",
+        "select_query": "SELECT * FROM klasse"
+    },
+    "klasse_elev": {
+        "fields": ["klasse_navn", "fornavn", "etternavn"],
+        "insert_query": "INSERT INTO klasse_elev (klasse_navn, fornavn, etternavn) VALUES (%s, %s, %s)",
+        "select_query": "SELECT * FROM klasse_elev"
+    },
+    "klasse_laerer": {
+        "fields": ["klasse_navn", "fornavn", "etternavn"],
+        "insert_query": "INSERT INTO klasse_laerer (klasse_navn, fornavn, etternavn) VALUES (%s, %s, %s)",
+        "select_query": "SELECT * FROM klasse_laerer"
+    },
+    "kontroll": {
+        "fields": ["fornavn", "etternavn", "beskrivelse", "dato"],
+        "insert_query": "INSERT INTO kontroll (fornavn, etternavn, beskrivelse, dato) VALUES (%s, %s, %s, %s)",
+        "select_query": "SELECT * FROM kontroll"
+    },
+    "devices": {
+        "fields": ["fornavn", "etternavn", "device_type", "device_model"],
+        "insert_query": "INSERT INTO devices (fornavn, etternavn, device_type, device_model) VALUES (%s, %s, %s, %s)",
+        "select_query": "SELECT * FROM devices"
+    },
+    "postdata": {
+        "fields": ["fornavn", "etternavn", "innhold", "tidspunkt"],
+        "insert_query": "INSERT INTO postdata (fornavn, etternavn, innhold, tidspunkt) VALUES (%s, %s, %s, CURRENT_TIMESTAMP)",
+        "select_query": "SELECT * FROM postdata"
+    },
+    "start": {
+        "fields": ["innstilling", "verdi"],
+        "insert_query": "INSERT INTO start (innstilling, verdi) VALUES (%s, %s)",
+        "select_query": "SELECT * FROM start"
     }
 }
 
