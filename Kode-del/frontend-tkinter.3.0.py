@@ -18,7 +18,7 @@ class SchoolDatabaseApp:
 
         # Tables Dictionary (same as previous code)
         self.tables = {
-            "rolle": {
+             "rolle": {
         "fields": ["rolle_navn"],
         "insert_query": "INSERT INTO rolle (rolle_navn) VALUES (%s)",
         "select_query": "SELECT * FROM rolle"
@@ -101,7 +101,6 @@ class SchoolDatabaseApp:
         }
 
         self.create_main_layout()
-        self.create_table_menu()
 
     def create_main_layout(self):
         # Main frame
@@ -114,9 +113,11 @@ class SchoolDatabaseApp:
 
         # Table selection dropdown
         self.table_var = tk.StringVar()
-        self.table_dropdown = ttk.Combobox(self.menu_frame, textvariable=self.table_var, 
+        self.table_dropdown = ttk.Combobox(self.menu_frame, 
+                                            textvariable=self.table_var, 
                                             values=list(self.tables.keys()), 
-                                            state="readonly", width=30)
+                                            state="readonly", 
+                                            width=30)
         self.table_dropdown.pack(side=tk.LEFT, padx=5)
         self.table_dropdown.bind("<<ComboboxSelected>>", self.on_table_select)
 
@@ -143,8 +144,11 @@ class SchoolDatabaseApp:
         self.results_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
         # Results Treeview
-        self.results_tree = ttk.Treeview(self.results_frame, selectmode='extended')
+        self.results_tree = ttk.Treeview(self.results_frame, selectmode='browse')
         self.results_tree.pack(fill=tk.BOTH, expand=True)
+        
+        # Bind selection event
+        self.results_tree.bind('<<TreeviewSelect>>', self.on_result_select)
         
         # Scrollbar for results
         scrollbar = ttk.Scrollbar(self.results_frame, orient=tk.VERTICAL, command=self.results_tree.yview)
@@ -158,17 +162,6 @@ class SchoolDatabaseApp:
         tk.Button(action_frame, text="Add", command=self.add_record).pack(side=tk.LEFT, padx=5)
         tk.Button(action_frame, text="Update", command=self.update_record).pack(side=tk.LEFT, padx=5)
         tk.Button(action_frame, text="Delete", command=self.delete_records).pack(side=tk.LEFT, padx=5)
-
-    def create_table_menu(self):
-        # Create a dropdown menu for tables
-        self.table_menu = tk.Menu(self.root, tearoff=0)
-        for table_name in self.tables.keys():
-            self.table_menu.add_command(label=table_name, command=lambda name=table_name: self.select_table(name))
-
-    def select_table(self, table_name):
-        # Set the selected table in the dropdown
-        self.table_var.set(table_name)
-        self.on_table_select()
 
     def on_table_select(self, event=None):
         # Clear previous data entry widgets
@@ -207,7 +200,7 @@ class SchoolDatabaseApp:
         # Create column headings
         for field in self.tables[table_name]['fields']:
             self.results_tree.heading(field, text=field)
-            self.results_tree.column(field, anchor='center')
+            self.results_tree.column(field, anchor='center', width=100)
 
         # Fetch and populate data
         try:
@@ -222,6 +215,20 @@ class SchoolDatabaseApp:
             messagebox.showerror("Database Error", str(err))
         finally:
             conn.close()
+
+    def on_result_select(self, event):
+        # Get selected item
+        selected_item = self.results_tree.selection()
+        if not selected_item:
+            return
+
+        # Get the values of the selected item
+        values = self.results_tree.item(selected_item[0])['values']
+
+        # Populate input fields with selected record
+        for i, field in enumerate(self.tables[self.table_var.get()]['fields']):
+            self.entry_widgets[field].delete(0, tk.END)
+            self.entry_widgets[field].insert(0, values[i])
 
     def perform_search(self, event=None):
         # Get search term and selected table
@@ -293,25 +300,23 @@ class SchoolDatabaseApp:
             messagebox.showwarning("Warning", "Select a table first")
             return
 
-        # Get selected item from treeview
-        selected_item = self.results_tree.selection()
-        if not selected_item:
-            messagebox.showwarning("Warning", "Select a record to update")
-            return
-
-        # Get current values
-        current_values = self.results_tree.item(selected_item[0])['values']
-
         # Collect new values from entry widgets
         new_values = [widget.get() for widget in self.entry_widgets.values()]
+
+        # Validate input
+        if any(val.strip() == '' for val in new_values):
+            messagebox.showwarning("Warning", "All fields must be filled")
+            return
 
         try:
             conn = mysql.connector.connect(**self.DB_CONFIG)
             cursor = conn.cursor()
             
-            # Prepare update query with current values as identifier
+            # Prepare update query
             update_query = self.tables[selected_table]['update_query']
-            full_values = new_values + list(current_values[:len(current_values)])
+            
+            # For most tables, the last two parameters are the original values to identify the record
+            full_values = new_values + new_values[:2]
             
             cursor.execute(update_query, tuple(full_values))
             
@@ -347,13 +352,12 @@ class SchoolDatabaseApp:
             cursor = conn.cursor()
 
             # Construct delete query dynamically
-            fields = self.tables[selected_table]['fields']
-            delete_query = f"DELETE FROM {selected_table} WHERE {fields[0]} = %s"
+            delete_query = f"DELETE FROM {selected_table} WHERE fornavn = %s AND etternavn = %s"
 
             # Delete each selected record
             for item in selected_items:
                 values = self.results_tree.item(item)['values']
-                cursor.execute(delete_query, (values[0],))
+                cursor.execute(delete_query, (values[0], values[1]))
 
             conn.commit()
             messagebox.showinfo("Success", f"{len(selected_items)} records deleted")
