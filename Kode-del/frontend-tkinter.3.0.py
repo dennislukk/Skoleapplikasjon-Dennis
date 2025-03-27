@@ -18,7 +18,7 @@ class SchoolDatabaseApp:
 
         # Tables Dictionary (same as previous code)
         self.tables = {
-             "rolle": {
+           "rolle": {
         "fields": ["rolle_navn"],
         "insert_query": "INSERT INTO rolle (rolle_navn) VALUES (%s)",
         "select_query": "SELECT * FROM rolle"
@@ -143,12 +143,19 @@ class SchoolDatabaseApp:
         self.results_frame = tk.Frame(self.content_frame)
         self.results_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-        # Results Treeview
-        self.results_tree = ttk.Treeview(self.results_frame, selectmode='browse')
-        self.results_tree.pack(fill=tk.BOTH, expand=True)
+        # Results Treeview with checkboxes
+        self.results_tree = ttk.Treeview(self.results_frame, selectmode='extended', columns=('check',))
+        self.results_tree.pack(fill=tk.BOTH, expand=True, anchor='w')
+        
+        # Configure the checkbox column
+        self.results_tree.heading('check', text='Select')
+        self.results_tree.column('check', width=50, anchor='center')
         
         # Bind selection event
         self.results_tree.bind('<<TreeviewSelect>>', self.on_result_select)
+        
+        # Checkbox click handler
+        self.results_tree.bind('<Button-1>', self.toggle_checkbox)
         
         # Scrollbar for results
         scrollbar = ttk.Scrollbar(self.results_frame, orient=tk.VERTICAL, command=self.results_tree.yview)
@@ -160,8 +167,26 @@ class SchoolDatabaseApp:
         action_frame.pack(fill=tk.X, pady=5)
 
         tk.Button(action_frame, text="Add", command=self.add_record).pack(side=tk.LEFT, padx=5)
-        tk.Button(action_frame, text="Update", command=self.update_record).pack(side=tk.LEFT, padx=5)
+        tk.Button(action_frame, text="Update Selected", command=self.update_selected_record).pack(side=tk.LEFT, padx=5)
+        tk.Button(action_frame, text="Update All", command=self.update_all_records).pack(side=tk.LEFT, padx=5)
         tk.Button(action_frame, text="Delete", command=self.delete_records).pack(side=tk.LEFT, padx=5)
+
+    def toggle_checkbox(self, event):
+        # Get the column that was clicked
+        region = self.results_tree.identify("region", event.x, event.y)
+        if region == "cell":
+            column = self.results_tree.identify_column(event.x)
+            
+            # Only toggle if the first column (checkbox) is clicked
+            if column == '#1':
+                # Get the row that was clicked
+                row = self.results_tree.identify_row(event.y)
+                
+                # Toggle the checkbox
+                current_values = self.results_tree.item(row, 'values')
+                if len(current_values) > 0:
+                    new_values = ('✓' if current_values[0] != '✓' else '', *current_values[1:])
+                    self.results_tree.item(row, values=new_values)
 
     def on_table_select(self, event=None):
         # Clear previous data entry widgets
@@ -195,9 +220,12 @@ class SchoolDatabaseApp:
             self.results_tree.delete(i)
 
         # Configure columns
-        self.results_tree['columns'] = self.tables[table_name]['fields']
+        self.results_tree['columns'] = ('check',) + tuple(self.tables[table_name]['fields'])
         
         # Create column headings
+        self.results_tree.heading('check', text='Select')
+        self.results_tree.column('check', width=50, anchor='center')
+        
         for field in self.tables[table_name]['fields']:
             self.results_tree.heading(field, text=field)
             self.results_tree.column(field, anchor='center', width=100)
@@ -209,7 +237,8 @@ class SchoolDatabaseApp:
             cursor.execute(self.tables[table_name]['select_query'])
             
             for row in cursor.fetchall():
-                self.results_tree.insert('', 'end', values=row)
+                # Insert with an empty checkbox column
+                self.results_tree.insert('', 'end', values=('',) + row)
         
         except mysql.connector.Error as err:
             messagebox.showerror("Database Error", str(err))
@@ -222,13 +251,16 @@ class SchoolDatabaseApp:
         if not selected_item:
             return
 
-        # Get the values of the selected item
-        values = self.results_tree.item(selected_item[0])['values']
+        # Get the values of the selected item (skipping the checkbox column)
+        values = self.results_tree.item(selected_item[0])['values'][1:]
 
         # Populate input fields with selected record
         for i, field in enumerate(self.tables[self.table_var.get()]['fields']):
             self.entry_widgets[field].delete(0, tk.END)
             self.entry_widgets[field].insert(0, values[i])
+
+        # Store the selected item for later use in update
+        self.selected_item = selected_item[0]
 
     def perform_search(self, event=None):
         # Get search term and selected table
@@ -251,7 +283,7 @@ class SchoolDatabaseApp:
             for row in cursor.fetchall():
                 # Convert row to string for case-insensitive search
                 if any(search_term in str(val).lower() for val in row):
-                    self.results_tree.insert('', 'end', values=row)
+                    self.results_tree.insert('', 'end', values=('',) + row)
         
         except mysql.connector.Error as err:
             messagebox.showerror("Database Error", str(err))
@@ -294,11 +326,25 @@ class SchoolDatabaseApp:
         finally:
             conn.close()
 
-    def update_record(self):
+    def update_selected_record(self):
         selected_table = self.table_var.get()
         if not selected_table:
             messagebox.showwarning("Warning", "Select a table first")
             return
+
+        # Check if a record is selected
+        if not hasattr(self, 'selected_item'):
+            messagebox.showwarning("Warning", "Select a record to update")
+            return
+
+        # Add update_query to the tables dictionary if not already present
+        if 'update_query' not in self.tables[selected_table]:
+            # Generic update query for tables with fornavn and etternavn
+            self.tables[selected_table]['update_query'] = f"""
+            UPDATE {selected_table} 
+            SET {', '.join(f'{field} = %s' for field in self.tables[selected_table]['fields'])} 
+            WHERE fornavn = %s AND etternavn = %s
+            """
 
         # Collect new values from entry widgets
         new_values = [widget.get() for widget in self.entry_widgets.values()]
@@ -315,13 +361,57 @@ class SchoolDatabaseApp:
             # Prepare update query
             update_query = self.tables[selected_table]['update_query']
             
-            # For most tables, the last two parameters are the original values to identify the record
-            full_values = new_values + new_values[:2]
+            # Original record values for WHERE clause (from the selected row)
+            original_values = self.results_tree.item(self.selected_item)['values'][1:]
+            
+            # Combine new values and original first/last name for WHERE clause
+            full_values = new_values + [original_values[0], original_values[1]]
             
             cursor.execute(update_query, tuple(full_values))
             
             conn.commit()
-            messagebox.showinfo("Success", "Record updated successfully")
+            messagebox.showinfo("Success", "Selected record updated successfully")
+
+            # Refresh results
+            self.populate_results_tree(selected_table)
+
+        except mysql.connector.Error as err:
+            messagebox.showerror("Database Error", str(err))
+        finally:
+            conn.close()
+
+    def update_all_records(self):
+        selected_table = self.table_var.get()
+        if not selected_table:
+            messagebox.showwarning("Warning", "Select a table first")
+            return
+
+        # Collect values from entry widgets
+        new_values = [widget.get() for widget in self.entry_widgets.values()]
+
+        # Validate input
+        if any(val.strip() == '' for val in new_values):
+            messagebox.showwarning("Warning", "All fields must be filled")
+            return
+
+        # Confirm global update
+        if not messagebox.askyesno("Confirm", "Are you sure you want to update ALL records with these values?"):
+            return
+
+        try:
+            conn = mysql.connector.connect(**self.DB_CONFIG)
+            cursor = conn.cursor()
+            
+            # Generic update query to set all rows to the same values
+            update_query = f"""
+            UPDATE {selected_table} 
+            SET {', '.join(f'{field} = %s' for field in self.tables[selected_table]['fields'])}
+            """
+            
+            cursor.execute(update_query, tuple(new_values))
+            
+            conn.commit()
+            messagebox.showinfo("Success", f"All records in {selected_table} updated successfully")
 
             # Refresh results
             self.populate_results_tree(selected_table)
@@ -337,14 +427,18 @@ class SchoolDatabaseApp:
             messagebox.showwarning("Warning", "Select a table first")
             return
 
-        # Get selected items
-        selected_items = self.results_tree.selection()
+        # Get selected items with checkmark
+        selected_items = [
+            item for item in self.results_tree.get_children() 
+            if self.results_tree.item(item)['values'][0] == '✓'
+        ]
+
         if not selected_items:
             messagebox.showwarning("Warning", "Select records to delete")
             return
 
         # Confirm deletion
-        if not messagebox.askyesno("Confirm", "Are you sure you want to delete selected records?"):
+        if not messagebox.askyesno("Confirm", f"Are you sure you want to delete {len(selected_items)} records?"):
             return
 
         try:
@@ -356,7 +450,7 @@ class SchoolDatabaseApp:
 
             # Delete each selected record
             for item in selected_items:
-                values = self.results_tree.item(item)['values']
+                values = self.results_tree.item(item)['values'][1:]  # Skip checkbox column
                 cursor.execute(delete_query, (values[0], values[1]))
 
             conn.commit()
