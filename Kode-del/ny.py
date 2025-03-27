@@ -189,7 +189,7 @@ class SchoolDatabaseApp:
                     self.results_tree.item(row, values=new_values)
 
     def on_table_select(self, event=None):
-    # Clear previous data entry widgets
+        # Clear previous data entry widgets
         for widget in self.data_entry_frame.winfo_children():
             widget.destroy()
 
@@ -197,39 +197,30 @@ class SchoolDatabaseApp:
         if not selected_table:
             return
 
-    # Create data entry widgets for the selected table
+        # Create data entry widgets for the selected table
         self.entry_widgets = {}
         for i, field in enumerate(self.tables[selected_table]['fields']):
             frame = tk.Frame(self.data_entry_frame)
             frame.pack(fill=tk.X, padx=5, pady=2)
-        
+            
             label = tk.Label(frame, text=field, width=15, anchor='w')
             label.pack(side=tk.LEFT)
+            
+            # Check if the field is a foreign key, and create a Combobox for it
+            if field.endswith('_navn'):  # assuming foreign keys end with '_navn'
+                combobox = ttk.Combobox(frame, width=30)
+                self.entry_widgets[field] = combobox
+                combobox.pack(side=tk.LEFT, expand=True, fill=tk.X)
 
-        # If the field is for "fornavn" or "etternavn" (foreign key), use a Combobox
-            if field in ["fornavn", "etternavn"]:
-                entry = ttk.Combobox(frame, width=30, state="readonly")
-                # Fetch fornavn and etternavn from brukere
-                try:
-                    conn = mysql.connector.connect(**self.DB_CONFIG)
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT fornavn, etternavn FROM brukere")
-                    names = cursor.fetchall()
-                    # Populate the combobox with the results from brukere
-                    entry['values'] = [f"{fn} {ln}" for fn, ln in names]
-                except mysql.connector.Error as err:
-                    messagebox.showerror("Database Error", str(err))
-                finally:
-                    conn.close()
+                # Fetch possible values for the foreign key field
+                self.populate_foreign_key_values(field, combobox)
             else:
                 entry = tk.Entry(frame, width=30)
-
-            entry.pack(side=tk.LEFT, expand=True, fill=tk.X)
-            self.entry_widgets[field] = entry
+                self.entry_widgets[field] = entry
+                entry.pack(side=tk.LEFT, expand=True, fill=tk.X)
 
         # Populate results treeview
         self.populate_results_tree(selected_table)
-
 
     def populate_foreign_key_values(self, field, combobox):
         # Based on the field name, select the appropriate foreign key table
@@ -334,12 +325,7 @@ class SchoolDatabaseApp:
         # Collect values from entry widgets
         values = [widget.get() for widget in self.entry_widgets.values()]
 
-        # Split the fornavn etternavn fields (for foreign key)
-        fornavn_etternavn = values[0].split(' ')  # assuming fornavn is at index 0
-        values[0] = fornavn_etternavn[0]  # fornavn
-        values[1] = fornavn_etternavn[1]  # etternavn
-
-    # Validate input
+        # Validate input
         if any(val.strip() == '' for val in values):
             messagebox.showwarning("Warning", "All fields must be filled")
             return
@@ -347,10 +333,10 @@ class SchoolDatabaseApp:
         try:
             conn = mysql.connector.connect(**self.DB_CONFIG)
             cursor = conn.cursor()
-
+            
             # Execute insert query
             cursor.execute(self.tables[selected_table]['insert_query'], tuple(values))
-
+            
             conn.commit()
             messagebox.showinfo("Success", "Record added successfully")
 
@@ -365,7 +351,6 @@ class SchoolDatabaseApp:
             messagebox.showerror("Database Error", str(err))
         finally:
             conn.close()
-
 
     def update_selected_record(self):
         selected_table = self.table_var.get()
@@ -390,31 +375,26 @@ class SchoolDatabaseApp:
         # Collect new values from entry widgets
         new_values = [widget.get() for widget in self.entry_widgets.values()]
 
-        # Split the fornavn etternavn fields (for foreign key)
-        fornavn_etternavn = new_values[0].split(' ')  # assuming fornavn is at index 0
-        new_values[0] = fornavn_etternavn[0]  # fornavn
-        new_values[1] = fornavn_etternavn[1]  # etternavn
-
         # Validate input
         if any(val.strip() == '' for val in new_values):
-         messagebox.showwarning("Warning", "All fields must be filled")
-         return
+            messagebox.showwarning("Warning", "All fields must be filled")
+            return
 
         try:
             conn = mysql.connector.connect(**self.DB_CONFIG)
             cursor = conn.cursor()
-
+            
             # Prepare update query
             update_query = self.tables[selected_table]['update_query']
-
+            
             # Original record values for WHERE clause (from the selected row)
             original_values = self.results_tree.item(self.selected_item)['values'][1:]
-
+            
             # Combine new values and original first/last name for WHERE clause
             full_values = new_values + [original_values[0], original_values[1]]
-
+            
             cursor.execute(update_query, tuple(full_values))
-
+            
             conn.commit()
             messagebox.showinfo("Success", "Selected record updated successfully")
 
@@ -425,7 +405,6 @@ class SchoolDatabaseApp:
             messagebox.showerror("Database Error", str(err))
         finally:
             conn.close()
-
 
     def update_all_records(self):
         selected_table = self.table_var.get()
