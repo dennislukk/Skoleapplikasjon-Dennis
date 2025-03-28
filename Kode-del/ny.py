@@ -24,23 +24,23 @@ class SchoolDatabaseApp:
         "select_query": "SELECT * FROM rolle"
     },
     "brukere": {
-        "fields": ["fornavn", "etternavn", "rolle_navn"],
-        "insert_query": "INSERT INTO brukere (fornavn, etternavn, rolle_navn) VALUES (%s, %s, %s)",
+        "fields": ["fornavn", "etternavn", "rolle_navn", "epost"],
+        "insert_query": "INSERT INTO brukere (fornavn, etternavn, rolle_navn, epost) VALUES (%s, %s, %s, %s)",
         "select_query": "SELECT * FROM brukere"
     },
     "admin": {
-        "fields": ["fornavn", "etternavn"],
-        "insert_query": "INSERT INTO admin (fornavn, etternavn) VALUES (%s, %s)",
+        "fields": ["epost"],
+        "insert_query": "INSERT INTO admin (epost) VALUES (%s)",
         "select_query": "SELECT * FROM admin"
     },
     "laerer": {
-        "fields": ["fornavn", "etternavn", "fag", "alder"],
-        "insert_query": "INSERT INTO laerer (fornavn, etternavn, fag, alder) VALUES (%s, %s, %s, %s)",
+        "fields": ["epost", "fag", "alder"],
+        "insert_query": "INSERT INTO laerer (epost, fag, alder) VALUES (%s, %s, %s)",
         "select_query": "SELECT * FROM laerer"
     },
     "elever": {
-        "fields": ["fornavn", "etternavn", "trinn", "fodselsdato"],
-        "insert_query": "INSERT INTO elever (fornavn, etternavn, trinn, fodselsdato) VALUES (%s, %s, %s, %s)",
+        "fields": ["epost", "trinn", "fodselsdato"],
+        "insert_query": "INSERT INTO elever (epost, trinn, fodselsdato) VALUES (%s, %s, %s)",
         "select_query": "SELECT * FROM elever"
     },
     "fag": {
@@ -49,18 +49,18 @@ class SchoolDatabaseApp:
         "select_query": "SELECT * FROM fag"
     },
     "elev_fag": {
-        "fields": ["fornavn", "etternavn", "fag_navn", "karakter"],
-        "insert_query": "INSERT INTO elev_fag (fornavn, etternavn, fag_navn, karakter) VALUES (%s, %s, %s, %s)",
+        "fields": ["epost", "fag_navn", "karakter"],
+        "insert_query": "INSERT INTO elev_fag (epost, fag_navn, karakter) VALUES (%s, %s, %s)",
         "select_query": "SELECT * FROM elev_fag"
     },
     "oppgaver": {
-        "fields": ["fornavn", "etternavn", "oppgave_tekst", "fag_navn"],
-        "insert_query": "INSERT INTO oppgaver (fornavn, etternavn, oppgave_tekst, fag_navn) VALUES (%s, %s, %s, %s)",
+        "fields": ["epost", "oppgave_tekst", "fag_navn"],
+        "insert_query": "INSERT INTO oppgaver (epost, oppgave_tekst, fag_navn) VALUES (%s, %s, %s)",
         "select_query": "SELECT * FROM oppgaver"
     },
     "fravaer": {
-        "fields": ["fornavn", "etternavn", "dato", "antall_timer"],
-        "insert_query": "INSERT INTO fravaer (fornavn, etternavn, dato, antall_timer) VALUES (%s, %s, %s, %s)",
+        "fields": ["epost", "dato", "antall_timer"],
+        "insert_query": "INSERT INTO fravaer (epost, dato, antall_timer) VALUES (%s, %s, %s)",
         "select_query": "SELECT * FROM fravaer"
     },
     "klasse": {
@@ -69,28 +69,28 @@ class SchoolDatabaseApp:
         "select_query": "SELECT * FROM klasse"
     },
     "klasse_elev": {
-        "fields": ["klasse_navn", "fornavn", "etternavn"],
-        "insert_query": "INSERT INTO klasse_elev (klasse_navn, fornavn, etternavn) VALUES (%s, %s, %s)",
+        "fields": ["klasse_navn", "epost"],
+        "insert_query": "INSERT INTO klasse_elev (klasse_navn, epost) VALUES (%s, %s)",
         "select_query": "SELECT * FROM klasse_elev"
     },
     "klasse_laerer": {
-        "fields": ["klasse_navn", "fornavn", "etternavn"],
-        "insert_query": "INSERT INTO klasse_laerer (klasse_navn, fornavn, etternavn) VALUES (%s, %s, %s)",
+        "fields": ["klasse_navn", "epost"],
+        "insert_query": "INSERT INTO klasse_laerer (klasse_navn, epost) VALUES (%s, %s)",
         "select_query": "SELECT * FROM klasse_laerer"
     },
     "kontroll": {
-        "fields": ["fornavn", "etternavn", "beskrivelse", "dato"],
-        "insert_query": "INSERT INTO kontroll (fornavn, etternavn, beskrivelse, dato) VALUES (%s, %s, %s, %s)",
+        "fields": ["epost", "beskrivelse", "dato"],
+        "insert_query": "INSERT INTO kontroll (epost, beskrivelse, dato) VALUES (%s, %s, %s)",
         "select_query": "SELECT * FROM kontroll"
     },
     "devices": {
-        "fields": ["fornavn", "etternavn", "device_type", "device_model"],
-        "insert_query": "INSERT INTO devices (fornavn, etternavn, device_type, device_model) VALUES (%s, %s, %s, %s)",
+        "fields": ["epost", "device_type", "device_model"],
+        "insert_query": "INSERT INTO devices (epost, device_type, device_model) VALUES (%s, %s, %s)",
         "select_query": "SELECT * FROM devices"
     },
     "postdata": {
-        "fields": ["fornavn", "etternavn", "innhold", "tidspunkt"],
-        "insert_query": "INSERT INTO postdata (fornavn, etternavn, innhold, tidspunkt) VALUES (%s, %s, %s, CURRENT_TIMESTAMP)",
+        "fields": ["epost", "innhold", "tidspunkt"],
+        "insert_query": "INSERT INTO postdata (epost, innhold, tidspunkt) VALUES (%s, %s, %s)",
         "select_query": "SELECT * FROM postdata"
     },
     "start": {
@@ -98,6 +98,7 @@ class SchoolDatabaseApp:
         "insert_query": "INSERT INTO start (innstilling, verdi) VALUES (%s, %s)",
         "select_query": "SELECT * FROM start"
     }
+
         }
 
         self.create_main_layout()
