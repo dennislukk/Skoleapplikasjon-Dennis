@@ -10,7 +10,7 @@ class SchoolDatabaseApp:
 
         # Database Configuration
         self.DB_CONFIG = {
-            'host': "192.168.1.8",
+            'host': "10.10.25.50",
             'user': "dennis",
             'password': "dennis",
             'database': "Skoleapplikasjon"

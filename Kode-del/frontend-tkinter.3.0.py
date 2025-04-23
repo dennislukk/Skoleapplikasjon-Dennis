@@ -7,18 +7,27 @@ class SchoolDatabaseApp:
         self.root = root
         self.root.title("School Database Management")
         self.root.geometry("1400x800")
+        self.root.configure(bg='#f0f4f8')
 
-        # Database Configuration
+        # Styles
+        style = ttk.Style()
+        style.theme_use('default')
+        style.configure("TButton", font=("Arial", 10, "bold"), background="#4CAF50", foreground="white")
+        style.map("TButton", background=[("active", "#45a049")])
+        style.configure("TLabel", background='#f0f4f8', font=("Arial", 10))
+        style.configure("TEntry", font=("Arial", 10))
+        style.configure("Treeview", background="#ffffff", fieldbackground="#ffffff", font=("Arial", 10))
+        style.configure("Treeview.Heading", font=("Arial", 10, "bold"), background="#e0e0e0")
+
         self.DB_CONFIG = {
-            'host': "192.168.1.8",
+            'host': "10.10.25.50",
             'user': "dennis",
             'password': "dennis",
             'database': "Skoleapplikasjon"
         }
 
-        # Tables Dictionary (same as previous code)
         self.tables = {
-           "rolle": {
+    "rolle": {
         "fields": ["rolle_navn"],
         "insert_query": "INSERT INTO rolle (rolle_navn) VALUES (%s)",
         "select_query": "SELECT * FROM rolle"
@@ -98,78 +107,103 @@ class SchoolDatabaseApp:
         "insert_query": "INSERT INTO start (innstilling, verdi) VALUES (%s, %s)",
         "select_query": "SELECT * FROM start"
     }
-        }
+}  # behold hele tabellen som du har fra tidligere
 
         self.create_main_layout()
 
     def create_main_layout(self):
-        # Main frame
-        self.main_frame = tk.Frame(self.root)
+        self.main_frame = tk.Frame(self.root, bg='#f0f4f8')
         self.main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # Top menu frame
-        self.menu_frame = tk.Frame(self.main_frame)
+        self.menu_frame = tk.Frame(self.main_frame, bg='#f0f4f8')
         self.menu_frame.pack(fill=tk.X, pady=5)
 
-        # Table selection dropdown
         self.table_var = tk.StringVar()
-        self.table_dropdown = ttk.Combobox(self.menu_frame, 
-                                            textvariable=self.table_var, 
-                                            values=list(self.tables.keys()), 
-                                            state="readonly", 
-                                            width=30)
+        self.table_dropdown = ttk.Combobox(self.menu_frame, textvariable=self.table_var,
+                                           values=list(self.tables.keys()), state="readonly", width=30)
         self.table_dropdown.pack(side=tk.LEFT, padx=5)
         self.table_dropdown.bind("<<ComboboxSelected>>", self.on_table_select)
 
-        # Search frame
-        search_frame = tk.Frame(self.menu_frame)
+        search_frame = tk.Frame(self.menu_frame, bg='#f0f4f8')
         search_frame.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
 
-        tk.Label(search_frame, text="Search:").pack(side=tk.LEFT)
+        tk.Label(search_frame, text="Search:", bg='#f0f4f8').pack(side=tk.LEFT)
         self.search_entry = tk.Entry(search_frame, width=50)
         self.search_entry.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5)
         self.search_entry.bind('<KeyRelease>', self.perform_search)
 
-        # Main content area
-        self.content_frame = tk.Frame(self.main_frame)
+        self.content_frame = tk.Frame(self.main_frame, bg='#f0f4f8')
         self.content_frame.pack(fill=tk.BOTH, expand=True, pady=5)
 
-        # Left side - Data Entry
-        self.data_entry_frame = tk.Frame(self.content_frame, width=400, relief=tk.RIDGE, borderwidth=1)
+        self.data_entry_frame = tk.Frame(self.content_frame, width=400, relief=tk.RIDGE, borderwidth=1, bg='#ffffff')
         self.data_entry_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0,10))
         self.data_entry_frame.pack_propagate(False)
 
-        # Right side - Results
-        self.results_frame = tk.Frame(self.content_frame)
-        self.results_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        self.details_frame = tk.Frame(self.content_frame, width=400, bg='#e8f0fe', relief=tk.GROOVE, borderwidth=2)
+        self.details_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=(10,0))
+        self.details_label = tk.Label(self.details_frame, text="Detaljer", font=("Arial", 12, "bold"), bg='#e8f0fe')
+        self.details_label.pack(anchor='n', pady=10)
+        self.details_text = tk.Text(self.details_frame, height=30, state='disabled', wrap='word', bg='#ffffff')
+        self.details_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # Results Treeview with checkboxes
+        self.results_frame = tk.Frame(self.content_frame, bg='#f0f4f8')
+        self.results_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
         self.results_tree = ttk.Treeview(self.results_frame, selectmode='extended', columns=('check',))
         self.results_tree.pack(fill=tk.BOTH, expand=True, anchor='w')
-        
-        # Configure the checkbox column
         self.results_tree.heading('check', text='Select')
         self.results_tree.column('check', width=50, anchor='center')
-        
-        # Bind selection event
         self.results_tree.bind('<<TreeviewSelect>>', self.on_result_select)
-        
-        # Checkbox click handler
         self.results_tree.bind('<Button-1>', self.toggle_checkbox)
-        
-        # Scrollbar for results
+
         scrollbar = ttk.Scrollbar(self.results_frame, orient=tk.VERTICAL, command=self.results_tree.yview)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.results_tree.configure(yscroll=scrollbar.set)
 
-        # Action buttons
-        action_frame = tk.Frame(self.results_frame)
+        action_frame = tk.Frame(self.results_frame, bg='#f0f4f8')
         action_frame.pack(fill=tk.X, pady=5)
 
-        tk.Button(action_frame, text="Add", command=self.add_record).pack(side=tk.LEFT, padx=5)
-        tk.Button(action_frame, text="Update Selected", command=self.update_selected_record).pack(side=tk.LEFT, padx=5)
-        tk.Button(action_frame, text="Update All", command=self.update_all_records).pack(side=tk.LEFT, padx=5)
-        tk.Button(action_frame, text="Delete", command=self.delete_records).pack(side=tk.LEFT, padx=5)
+        ttk.Button(action_frame, text="Add", command=self.add_record).pack(side=tk.LEFT, padx=5)
+        ttk.Button(action_frame, text="Update Selected", command=self.update_selected_record).pack(side=tk.LEFT, padx=5)
+        ttk.Button(action_frame, text="Update All", command=self.update_all_records).pack(side=tk.LEFT, padx=5)
+        ttk.Button(action_frame, text="Delete", command=self.delete_records).pack(side=tk.LEFT, padx=5)
+        ttk.Button(action_frame, text="Clear", command=self.clear_form).pack(side=tk.LEFT, padx=5)
+
+    def clear_form(self):
+        if hasattr(self, 'entry_widgets'):
+            for widget in self.entry_widgets.values():
+                widget.delete(0, tk.END)
+        self.details_text.configure(state='normal')
+        self.details_text.delete('1.0', tk.END)
+        self.details_text.configure(state='disabled')
+        if hasattr(self, 'selected_item'):
+            del self.selected_item
+
+    def on_result_select(self, event):
+        selected_item = self.results_tree.selection()
+        if not selected_item:
+            return
+
+        values = self.results_tree.item(selected_item[0])['values'][1:]
+
+        for i, field in enumerate(self.tables[self.table_var.get()]['fields']):
+            self.entry_widgets[field].delete(0, tk.END)
+            self.entry_widgets[field].insert(0, values[i])
+
+        self.selected_item = selected_item[0]
+
+        # Update detail box
+        self.details_text.configure(state='normal')
+        self.details_text.delete('1.0', tk.END)
+        for field, val in zip(self.tables[self.table_var.get()]['fields'], values):
+            self.details_text.insert(tk.END, f"{field}: {val}\n")
+        self.details_text.configure(state='disabled')
+
+    # resten av funksjonene (toggle_checkbox, on_table_select, populate_results_tree, perform_search,
+    # add_record, update_selected_record, update_all_records, delete_records, main()) forblir uendret
+
+# main() funksjonen også beholdes som før
+
 
     def toggle_checkbox(self, event):
         # Get the column that was clicked

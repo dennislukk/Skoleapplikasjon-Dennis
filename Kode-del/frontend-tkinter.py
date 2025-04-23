@@ -4,7 +4,7 @@ import tkinter.messagebox as msg
 import mysql.connector
  
 # --- KONFIGURASJON ---
-HOST = "192.168.1.8"         # Din MySQL-vert
+HOST = "10.10.25.50"         # Din MySQL-vert
 USER = "dennis"              # Ditt MySQL-brukernavn
 PASSWORD = "dennis"       # Ditt MySQL-passord
 DATABASE = "Skoleapplikasjon"      # Bruk databasen som er opprettet med SQL-koden din
