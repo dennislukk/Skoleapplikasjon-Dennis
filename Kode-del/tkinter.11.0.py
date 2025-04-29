@@ -1,6 +1,10 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import mysql.connector
+import pyotp
+import qrcode
+from io import BytesIO
+from PIL import Image, ImageTk
 
 ##########################################
 # Database Manager Klasse
@@ -27,7 +31,7 @@ class DatabaseManager:
             if conn:
                 conn.close()
 
-# Global database‐instans
+# Global database-instans
 DB_CONFIG = {
     'host': "10.10.25.50",
     'user': "dennis",
@@ -58,20 +62,105 @@ class LoginWindow:
 
     def attempt_login(self):
         user = self.username_entry.get().strip()
-        pwd = self.password_entry.get().strip()
+        pwd  = self.password_entry.get().strip()
         if not user or not pwd:
             messagebox.showwarning("Advarsel", "Fyll ut brukernavn og passord.")
             return
-        q = "SELECT rolle_navn FROM brukere WHERE epost=%s AND passord=%s"
+
+        # Sjekk brukernavn/passord
+        q = "SELECT rolle_navn, mfa_secret FROM brukere WHERE epost=%s AND passord=%s"
         res = db_manager.execute_query(q, (user, pwd))
-        if res:
-            role = res[0][0]
-            self.root.destroy()
+        if not res:
+            messagebox.showerror("Feil", "Ugyldig brukernavn eller passord.")
+            return
+
+        role, secret = res[0]
+        self.root.withdraw()  # Skjul login-vindu
+
+        if not secret:
+            # Første gang: opprett ny hemmelighet
+            secret = pyotp.random_base32()
+            upd = "UPDATE brukere SET mfa_secret=%s WHERE epost=%s"
+            db_manager.execute_query(upd, (secret, user), commit=True)
+            MFASetupWindow(self.root, user, role, secret)
+        else:
+            # Har allerede satt opp: gå rett til kode-verifisering
+            MFAVerifyWindow(self.root, user, role, secret)
+
+##########################################
+# MFA Setup-vindu (QR-kode)
+##########################################
+class MFASetupWindow:
+    def __init__(self, parent, user, role, secret):
+        self.parent = parent
+        self.user = user
+        self.role = role
+        self.secret = secret
+
+        self.win = tk.Toplevel(parent)
+        self.win.title("Sett opp MFA")
+        self.win.geometry("350x450")
+
+        issuer = "SkoleApp"
+        uri = pyotp.totp.TOTP(self.secret).provisioning_uri(self.user, issuer_name=issuer)
+
+        # Generer QR-kode
+        qr = qrcode.make(uri)
+        bio = BytesIO()
+        qr.save(bio, format="PNG")
+        img = Image.open(bio)
+        self.tkimg = ImageTk.PhotoImage(img.resize((300,300)))
+
+        tk.Label(self.win, text="Skann QR-koden i Microsoft Authenticator:").pack(pady=10)
+        tk.Label(self.win, image=self.tkimg).pack()
+        tk.Label(self.win, text="Deretter, tast inn koden:").pack(pady=(20,5))
+
+        self.code_entry = ttk.Entry(self.win, width=20)
+        self.code_entry.pack()
+        ttk.Button(self.win, text="Bekreft kode", command=self.verify_code).pack(pady=20)
+
+    def verify_code(self):
+        code = self.code_entry.get().strip()
+        totp = pyotp.TOTP(self.secret)
+        if totp.verify(code):
+            self.win.destroy()
+            # Åpne hoved-appen
             main_root = tk.Tk()
-            app = SchoolDatabaseApp(main_root, current_user=user, user_role=role)
+            SchoolDatabaseApp(main_root, current_user=self.user, user_role=self.role)
             main_root.mainloop()
         else:
-            messagebox.showerror("Feil", "Ugyldig brukernavn eller passord.")
+            messagebox.showerror("Feil", "Ugyldig kode – prøv igjen.")
+
+##########################################
+# MFA Verify-vindu (etter oppsett)
+##########################################
+class MFAVerifyWindow:
+    def __init__(self, parent, user, role, secret):
+        self.parent = parent
+        self.user = user
+        self.role = role
+        self.secret = secret
+
+        self.win = tk.Toplevel(parent)
+        self.win.title("To-faktor pålogging")
+        self.win.geometry("300x200")
+
+        ttk.Label(self.win, text="Tast inn kode fra Authenticator:").pack(pady=(40,10))
+        self.code_entry = ttk.Entry(self.win, width=20)
+        self.code_entry.pack()
+        ttk.Button(self.win, text="Logg inn", command=self.verify_code).pack(pady=20)
+
+    def verify_code(self):
+        code = self.code_entry.get().strip()
+        totp = pyotp.TOTP(self.secret)
+        if totp.verify(code):
+            self.win.destroy()
+            # Åpne hoved-appen
+            main_root = tk.Tk()
+            SchoolDatabaseApp(main_root, current_user=self.user, user_role=self.role)
+            main_root.mainloop()
+        else:
+            messagebox.showerror("Feil", "Ugyldig kode – prøv igjen.")
 
 ##########################################
 # Hoved GUI Applikasjon
@@ -86,7 +175,7 @@ class SchoolDatabaseApp:
         self.root.geometry("1400x800")
         self.root.configure(bg='#f0f8ff')
 
-        # Konfigurer ttk‐stil
+        # Konfigurer ttk-stil
         style = ttk.Style()
         style.theme_use('clam')
         style.configure("TButton", font=("Arial", 10, "bold"), background="#3498db",
@@ -107,43 +196,33 @@ class SchoolDatabaseApp:
                 "fields": ["epost"],
                 "insert_query": "INSERT INTO admin (epost) VALUES (%s)",
                 "select_query": "SELECT * FROM admin",
-                "foreign_keys": {
-                    "epost": {"table": "brukere", "display_fields": ["epost"]}
-                }
+                "foreign_keys": {"epost": {"table": "brukere", "display_fields": ["epost"]}}
             },
             "brukere": {
-                "fields": ["fornavn", "etternavn", "rolle_navn", "epost", "passord"],
+                "fields": ["fornavn", "etternavn", "rolle_navn", "epost", "passord", "mfa_secret"],
                 "insert_query": "INSERT INTO brukere (fornavn, etternavn, rolle_navn, epost, passord) VALUES (%s, %s, %s, %s, %s)",
                 "select_query": "SELECT fornavn, etternavn, rolle_navn, epost, passord FROM brukere",
-                "foreign_keys": {
-                    "rolle_navn": {"table": "rolle", "display_fields": ["rolle_navn"]}
-                }
+                "foreign_keys": {"rolle_navn": {"table": "rolle", "display_fields": ["rolle_navn"]}}
             },
             "devices": {
                 "fields": ["epost", "device_type", "device_model"],
                 "insert_query": "INSERT INTO devices (epost, device_type, device_model) VALUES (%s, %s, %s)",
                 "select_query": "SELECT * FROM devices",
-                "foreign_keys": {
-                    "epost": {"table": "brukere", "display_fields": ["epost"]}
-                }
+                "foreign_keys": {"epost": {"table": "brukere", "display_fields": ["epost"]}}
             },
             "elever": {
                 "fields": ["epost", "trinn", "født"],
                 "insert_query": "INSERT INTO elever (epost, trinn, født) VALUES (%s, %s, %s)",
                 "select_query": "SELECT epost, trinn, født FROM elever",
-                "foreign_keys": {
-                    "epost": {"table": "brukere", "display_fields": ["epost"]},
-                    "trinn": {"table": "klasse", "display_fields": ["trinn"]}
-                }
+                "foreign_keys": {"epost": {"table": "brukere", "display_fields": ["epost"]},
+                                  "trinn": {"table": "klasse", "display_fields": ["trinn"]}}
             },
             "elev_fag": {
                 "fields": ["epost", "fag_navn", "karakter"],
                 "insert_query": "INSERT INTO elev_fag (epost, fag_navn, karakter) VALUES (%s, %s, %s)",
                 "select_query": "SELECT * FROM elev_fag",
-                "foreign_keys": {
-                    "epost": {"table": "brukere", "display_fields": ["epost"]},
-                    "fag_navn": {"table": "fag", "display_fields": ["fag_navn"]}
-                }
+                "foreign_keys": {"epost": {"table": "brukere", "display_fields": ["epost"]},
+                                  "fag_navn": {"table": "fag", "display_fields": ["fag_navn"]}}
             },
             "fag": {
                 "fields": ["fag_navn"],
@@ -154,9 +233,7 @@ class SchoolDatabaseApp:
                 "fields": ["epost", "dato", "antall_timer"],
                 "insert_query": "INSERT INTO fravaer (epost, dato, antall_timer) VALUES (%s, %s, %s)",
                 "select_query": "SELECT * FROM fravaer",
-                "foreign_keys": {
-                    "epost": {"table": "brukere", "display_fields": ["epost"]}
-                }
+                "foreign_keys": {"epost": {"table": "brukere", "display_fields": ["epost"]}}
             },
             "klasse": {
                 "fields": ["trinn"],
@@ -167,53 +244,41 @@ class SchoolDatabaseApp:
                 "fields": ["klasse_navn", "epost"],
                 "insert_query": "INSERT INTO klasse_elev (klasse_navn, epost) VALUES (%s, %s)",
                 "select_query": "SELECT * FROM klasse_elev",
-                "foreign_keys": {
-                    "klasse_navn": {"table": "klasse", "display_fields": ["klasse_navn"]},
-                    "epost": {"table": "brukere", "display_fields": ["epost"]}
-                }
+                "foreign_keys": {"klasse_navn": {"table": "klasse", "display_fields": ["klasse_navn"]},
+                                  "epost": {"table": "brukere", "display_fields": ["epost"]}}
             },
             "klasse_laerer": {
                 "fields": ["klasse_navn", "epost"],
                 "insert_query": "INSERT INTO klasse_laerer (klasse_navn, epost) VALUES (%s, %s)",
                 "select_query": "SELECT * FROM klasse_laerer",
-                "foreign_keys": {
-                    "klasse_navn": {"table": "klasse", "display_fields": ["klasse_navn"]},
-                    "epost": {"table": "brukere", "display_fields": ["epost"]}
-                }
+                "foreign_keys": {"klasse_navn": {"table": "klasse", "display_fields": ["klasse_navn"]},
+                                  "epost": {"table": "brukere", "display_fields": ["epost"]}}
             },
             "kontroll": {
                 "fields": ["epost", "beskrivelse", "dato"],
                 "insert_query": "INSERT INTO kontroll (epost, beskrivelse, dato) VALUES (%s, %s, %s)",
                 "select_query": "SELECT * FROM kontroll",
-                "foreign_keys": {
-                    "epost": {"table": "brukere", "display_fields": ["epost"]}
-                }
+                "foreign_keys": {"epost": {"table": "brukere", "display_fields": ["epost"]}}
             },
             "laerer": {
                 "fields": ["epost", "fag", "alder"],
                 "insert_query": "INSERT INTO laerer (epost, fag, alder) VALUES (%s, %s, %s)",
                 "select_query": "SELECT * FROM laerer",
-                "foreign_keys": {
-                    "epost": {"table": "brukere", "display_fields": ["epost"]},
-                    "fag": {"table": "fag", "display_fields": ["fag_navn"]}
-                }
+                "foreign_keys": {"epost": {"table": "brukere", "display_fields": ["epost"]},
+                                  "fag": {"table": "fag", "display_fields": ["fag_navn"]}}
             },
             "oppgaver": {
                 "fields": ["epost", "oppgave_tekst", "fag_navn"],
                 "insert_query": "INSERT INTO oppgaver (epost, oppgave_tekst, fag_navn) VALUES (%s, %s, %s)",
                 "select_query": "SELECT * FROM oppgaver",
-                "foreign_keys": {
-                    "epost": {"table": "brukere", "display_fields": ["epost"]},
-                    "fag_navn": {"table": "fag", "display_fields": ["fag_navn"]}
-                }
+                "foreign_keys": {"epost": {"table": "brukere", "display_fields": ["epost"]},
+                                  "fag_navn": {"table": "fag", "display_fields": ["fag_navn"]}}
             },
             "postdata": {
                 "fields": ["epost", "innhold", "tidspunkt"],
                 "insert_query": "INSERT INTO postdata (epost, innhold, tidspunkt) VALUES (%s, %s, %s)",
                 "select_query": "SELECT * FROM postdata",
-                "foreign_keys": {
-                    "epost": {"table": "brukere", "display_fields": ["epost"]}
-                }
+                "foreign_keys": {"epost": {"table": "brukere", "display_fields": ["epost"]}}
             },
             "rolle": {
                 "fields": ["rolle_navn"],
@@ -626,9 +691,8 @@ class SchoolDatabaseApp:
         messagebox.showinfo("Suksess", f"Slettet {len(sels)} poster.")
         self.populate_results_tree(tbl)
 
-##########################################
 # Main
-##########################################
+
 def main():
     login_root = tk.Tk()
     LoginWindow(login_root)
