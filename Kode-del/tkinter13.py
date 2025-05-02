@@ -1,6 +1,9 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, simpledialog
 import mysql.connector
+import pyotp
+import qrcode
+from PIL import Image, ImageTk  # pip install pillow hvis ikke installert
 
 ##########################################
 # Database Manager Klasse
@@ -37,7 +40,7 @@ DB_CONFIG = {
 db_manager = DatabaseManager(DB_CONFIG)
 
 ##########################################
-# Påloggingsvindu
+# Påloggingsvindu med 2FA
 ##########################################
 class LoginWindow:
     def __init__(self, root):
@@ -58,20 +61,65 @@ class LoginWindow:
 
     def attempt_login(self):
         user = self.username_entry.get().strip()
-        pwd = self.password_entry.get().strip()
+        pwd  = self.password_entry.get().strip()
         if not user or not pwd:
             messagebox.showwarning("Advarsel", "Fyll ut brukernavn og passord.")
             return
-        q = "SELECT rolle_navn FROM brukere WHERE epost=%s AND passord=%s"
+
+        # Hent rolle og mfa_secret
+        q = "SELECT rolle_navn, mfa_secret FROM brukere WHERE epost=%s AND passord=%s"
         res = db_manager.execute_query(q, (user, pwd))
-        if res:
-            role = res[0][0]
-            self.root.destroy()
-            main_root = tk.Tk()
-            app = SchoolDatabaseApp(main_root, current_user=user, user_role=role)
-            main_root.mainloop()
-        else:
+        if not res:
             messagebox.showerror("Feil", "Ugyldig brukernavn eller passord.")
+            return
+
+        role, secret = res[0]
+
+        # Hvis 2FA ikke er aktivert, tilby å konfigurere nå
+        if not secret:
+            if messagebox.askyesno("2FA ikke aktivert",
+                                   "Du har ikke konfigurert 2FA enda.\n\n"
+                                   "Vil du konfigurere nå?"):
+                # Generer hemmelighet, lagre i DB
+                new_secret = pyotp.random_base32()
+                db_manager.execute_query(
+                    "UPDATE brukere SET mfa_secret=%s WHERE epost=%s",
+                    (new_secret, user),
+                    commit=True
+                )
+                # Lag provisioning URI og QR-kode
+                uri = pyotp.TOTP(new_secret).provisioning_uri(
+                    name=user,
+                    issuer_name="Skoleapplikasjon"
+                )
+                qr_img = qrcode.make(uri)
+
+                # Vis kun QR-kode i eget vindu
+                win = tk.Toplevel(self.root)
+                win.title("Konfigurer 2FA")
+                win.geometry("300x350")
+                tk.Label(win, text="Skann denne QR-koden\nmed Microsoft Authenticator:",
+                         font=("Arial", 12), justify="center").pack(pady=10)
+                tk_img = ImageTk.PhotoImage(qr_img)
+                lbl = tk.Label(win, image=tk_img)
+                lbl.image = tk_img  # behold referanse
+                lbl.pack(padx=10, pady=10)
+                ttk.Button(win, text="Ferdig", command=win.destroy).pack(pady=(0,10))
+            return
+
+        # Spør om koden fra Authenticator og verifiser
+        code = simpledialog.askstring("2FA",
+                                      "Skriv inn 6-sifret kode fra Authenticator:",
+                                      parent=self.root)
+        if not code or not pyotp.TOTP(secret).verify(code):
+            messagebox.showerror("Feil 2FA", "Ugyldig eller utløpt kode.")
+            return
+
+        # Alt OK → åpne hovedapplikasjon
+        self.root.destroy()
+        main_root = tk.Tk()
+        app = SchoolDatabaseApp(main_root, current_user=user, user_role=role)
+        main_root.mainloop()
 
 ##########################################
 # Hoved GUI Applikasjon
@@ -107,25 +155,19 @@ class SchoolDatabaseApp:
                 "fields": ["epost"],
                 "insert_query": "INSERT INTO admin (epost) VALUES (%s)",
                 "select_query": "SELECT * FROM admin",
-                "foreign_keys": {
-                    "epost": {"table": "brukere", "display_fields": ["epost"]}
-                }
+                "foreign_keys": {"epost": {"table": "brukere", "display_fields": ["epost"]}}
             },
             "brukere": {
                 "fields": ["fornavn", "etternavn", "rolle_navn", "epost", "passord"],
                 "insert_query": "INSERT INTO brukere (fornavn, etternavn, rolle_navn, epost, passord) VALUES (%s, %s, %s, %s, %s)",
                 "select_query": "SELECT fornavn, etternavn, rolle_navn, epost, passord FROM brukere",
-                "foreign_keys": {
-                    "rolle_navn": {"table": "rolle", "display_fields": ["rolle_navn"]}
-                }
+                "foreign_keys": {"rolle_navn": {"table": "rolle", "display_fields": ["rolle_navn"]}}
             },
             "devices": {
                 "fields": ["epost", "device_type", "device_model"],
                 "insert_query": "INSERT INTO devices (epost, device_type, device_model) VALUES (%s, %s, %s)",
                 "select_query": "SELECT * FROM devices",
-                "foreign_keys": {
-                    "epost": {"table": "brukere", "display_fields": ["epost"]}
-                }
+                "foreign_keys": {"epost": {"table": "brukere", "display_fields": ["epost"]}}
             },
             "elever": {
                 "fields": ["epost", "trinn", "født"],
@@ -154,9 +196,7 @@ class SchoolDatabaseApp:
                 "fields": ["epost", "dato", "antall_timer"],
                 "insert_query": "INSERT INTO fravaer (epost, dato, antall_timer) VALUES (%s, %s, %s)",
                 "select_query": "SELECT * FROM fravaer",
-                "foreign_keys": {
-                    "epost": {"table": "brukere", "display_fields": ["epost"]}
-                }
+                "foreign_keys": {"epost": {"table": "brukere", "display_fields": ["epost"]}}
             },
             "klasse": {
                 "fields": ["trinn"],
@@ -185,9 +225,7 @@ class SchoolDatabaseApp:
                 "fields": ["epost", "beskrivelse", "dato"],
                 "insert_query": "INSERT INTO kontroll (epost, beskrivelse, dato) VALUES (%s, %s, %s)",
                 "select_query": "SELECT * FROM kontroll",
-                "foreign_keys": {
-                    "epost": {"table": "brukere", "display_fields": ["epost"]}
-                }
+                "foreign_keys": {"epost": {"table": "brukere", "display_fields": ["epost"]}}
             },
             "laerer": {
                 "fields": ["epost", "fag", "alder"],
@@ -211,9 +249,7 @@ class SchoolDatabaseApp:
                 "fields": ["epost", "innhold", "tidspunkt"],
                 "insert_query": "INSERT INTO postdata (epost, innhold, tidspunkt) VALUES (%s, %s, %s)",
                 "select_query": "SELECT * FROM postdata",
-                "foreign_keys": {
-                    "epost": {"table": "brukere", "display_fields": ["epost"]}
-                }
+                "foreign_keys": {"epost": {"table": "brukere", "display_fields": ["epost"]}}
             },
             "rolle": {
                 "fields": ["rolle_navn"],
@@ -222,7 +258,7 @@ class SchoolDatabaseApp:
             },
             "start": {
                 "fields": ["innstilling", "verdi"],
-                "insert_query": "INSERT INTO start (innstilling, verdi) VALUES (%s, %s)",
+                "insert_query": "INSERT INTO start (innstilling, verdi) VALUES (%s, %s)",        
                 "select_query": "SELECT * FROM start"
             }
         }
@@ -237,22 +273,22 @@ class SchoolDatabaseApp:
         self.main_frame = tk.Frame(self.root, bg='#f0f8ff')
         self.main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # Header
+        # Header med tittel, innlogget-etikett og Logg ut-knapp
         header = tk.Frame(self.main_frame, bg='#2980b9')
         header.pack(fill=tk.X, pady=(0,10))
         tk.Label(header, text="Skole Database Administrasjon",
                  bg='#2980b9', fg='white', font=("Arial",20,"bold")).pack(side=tk.LEFT, padx=10)
+        tk.Label(header, text=f"Innlogget som: {self.current_user}",
+                 bg='#2980b9', fg='white', font=("Arial",10,"italic")).pack(side=tk.RIGHT, padx=10)
+        ttk.Button(header, text="Logg ut", command=self.logout).pack(side=tk.RIGHT, padx=10)
 
         # Meny (tabellvalg, søk, sort)
         menu = tk.Frame(self.main_frame, bg='#f0f8ff')
         menu.pack(fill=tk.X)
-
         tk.Label(menu, text="Tabell:", bg='#f0f8ff', font=("Arial",10,"bold")).pack(side=tk.LEFT, padx=(5,0))
-        # Hvilke tabeller kan elev se?
         tables_to_show = list(self.tables.keys())
         if self.user_role == 'elev':
             tables_to_show = [t for t,v in self.tables.items() if 'epost' in v['fields']]
-
         self.table_var = tk.StringVar()
         self.table_dropdown = ttk.Combobox(menu, textvariable=self.table_var,
                                            values=tables_to_show, state="readonly", width=30)
@@ -291,7 +327,8 @@ class SchoolDatabaseApp:
         self.results_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=5)
         self.results_tree = ttk.Treeview(self.results_frame, selectmode='browse')
         self.results_tree.pack(fill=tk.BOTH, expand=True, anchor='w')
-        scrollbar = ttk.Scrollbar(self.results_frame, orient=tk.VERTICAL, command=self.results_tree.yview)
+        scrollbar = ttk.Scrollbar(self.results_frame, orient=tk.VERTICAL,
+                                  command=self.results_tree.yview)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.results_tree.configure(yscroll=scrollbar.set)
         self.results_tree.bind("<<TreeviewSelect>>", self.on_result_select)
@@ -299,7 +336,6 @@ class SchoolDatabaseApp:
         # CRUD‐knapper kun for admin og lærere
         action_frame = tk.Frame(self.results_frame, bg='#f0f8ff')
         action_frame.pack(fill=tk.X, pady=5)
-        self.buttons = []
         if self.user_role != 'elev':
             for txt, cmd in [
                 ("Legg til", self.add_record),
@@ -309,9 +345,7 @@ class SchoolDatabaseApp:
                 ("Slett valgte", self.delete_records),
                 ("Tøm skjema", self.clear_form)
             ]:
-                btn = ttk.Button(action_frame, text=txt, command=cmd)
-                btn.pack(side=tk.LEFT, padx=5)
-                self.buttons.append(btn)
+                ttk.Button(action_frame, text=txt, command=cmd).pack(side=tk.LEFT, padx=5)
 
         # Detaljer‐panel
         details = ttk.LabelFrame(self.main_frame, text="Detaljer")
@@ -325,6 +359,15 @@ class SchoolDatabaseApp:
                                    relief=tk.SUNKEN, anchor='w',
                                    font=("Arial",9), bg='white', fg='#2c3e50')
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
+
+    ##########################################
+    # Logg ut-funksjon
+    ##########################################
+    def logout(self):
+        self.root.destroy()
+        new_root = tk.Tk()
+        LoginWindow(new_root)
+        new_root.mainloop()
 
     ##########################################
     # Navigasjon og oppfriskning
@@ -367,7 +410,6 @@ class SchoolDatabaseApp:
             self.entry_widgets = {}
             fks = info.get('foreign_keys', {})
             for field in info['fields']:
-                # Skjul passord for ikke-admin
                 if tbl == 'brukere' and field == 'passord' and self.user_role != 'admin':
                     continue
                 frm = tk.Frame(self.data_entry_frame, bg='#dfe6e9')
@@ -391,7 +433,6 @@ class SchoolDatabaseApp:
                 ent.pack(side=tk.LEFT, fill=tk.X, expand=True)
                 self.entry_widgets[field] = ent
 
-        # Oppdater sorteringsvalg (uten passord for ikke-admin)
         visible_fields = [
             f for f in info['fields']
             if not (tbl == 'brukere' and f == 'passord' and self.user_role != 'admin')
@@ -404,13 +445,11 @@ class SchoolDatabaseApp:
         self.status_var.set(f"Viser data for '{tbl}'.")
 
     def populate_results_tree(self, tbl):
-        # Tøm treet
         for item in self.results_tree.get_children():
             self.results_tree.delete(item)
 
         info = self.tables[tbl]
         all_fields = info['fields']
-        # Filtrer bort passord for ikke-admin
         if tbl == 'brukere' and self.user_role != 'admin':
             fields = [f for f in all_fields if f != 'passord']
             pass_idx = all_fields.index('passord')
@@ -426,14 +465,11 @@ class SchoolDatabaseApp:
             self.results_tree.column(c, anchor='center', width=120)
 
         rows = db_manager.execute_query(info['select_query']) or []
-
-        # Elever ser kun egne rader
         if self.user_role == 'elev' and 'epost' in all_fields:
             epost_idx = all_fields.index('epost')
             rows = [r for r in rows if r[epost_idx] == self.current_user]
 
         for r in rows:
-            # Drop passord‐verdi om skjult
             if pass_idx is not None:
                 r = tuple(v for i,v in enumerate(r) if i != pass_idx)
             self.results_tree.insert('', 'end', values=r)
@@ -452,7 +488,6 @@ class SchoolDatabaseApp:
             tbl = self.table_var.get()
             info = self.tables[tbl]
             all_fields = info['fields']
-            # Målfelt etter filtrering
             display_fields = [
                 f for f in all_fields
                 if not (tbl == 'brukere' and f == 'passord' and self.user_role != 'admin')
@@ -472,21 +507,14 @@ class SchoolDatabaseApp:
         self.results_tree.delete(*self.results_tree.get_children())
         info = self.tables[tbl]
         rows = db_manager.execute_query(info['select_query']) or []
-
-        # Filtrer for elever
         if self.user_role == 'elev' and 'epost' in info['fields']:
             idx = info['fields'].index('epost')
             rows = [r for r in rows if r[idx] == self.current_user]
-
-        # Søk
         matches = [r for r in rows if any(term in str(v).lower() for v in r)]
-
-        # Håndter passord‐skjul
         pass_idx = info['fields'].index('passord') if tbl=='brukere' and self.user_role!='admin' else None
         for r in matches:
             row = tuple(v for i,v in enumerate(r) if i != pass_idx) if pass_idx is not None else r
             self.results_tree.insert('', 'end', values=row)
-
         self.status_var.set(f"Søket fant {len(matches)} poster.")
         self.reselect_first_row()
 
@@ -499,25 +527,19 @@ class SchoolDatabaseApp:
         info = self.tables[tbl]
         q = info['select_query'] + f" ORDER BY {col} ASC"
         rows = db_manager.execute_query(q) or []
-
-        # Filtrer for elever
         if self.user_role == 'elev' and 'epost' in info['fields']:
             idx = info['fields'].index('epost')
             rows = [r for r in rows if r[idx] == self.current_user]
-
-        # Håndter passord‐skjul
         pass_idx = info['fields'].index('passord') if tbl=='brukere' and self.user_role!='admin' else None
-
         self.results_tree.delete(*self.results_tree.get_children())
         for r in rows:
             row = tuple(v for i,v in enumerate(r) if i != pass_idx) if pass_idx is not None else r
             self.results_tree.insert('', 'end', values=row)
-
         self.status_var.set(f"{len(rows)} poster sortert etter {col}.")
         self.reselect_first_row()
 
     ##########################################
-    # CRUD‐operasjoner (kun admin/­lærere)
+    # CRUD‐operasjoner (kun admin/lærere)
     ##########################################
     def add_record(self):
         tbl = self.table_var.get()
@@ -531,6 +553,25 @@ class SchoolDatabaseApp:
         info = self.tables[tbl]
         if db_manager.execute_query(info['insert_query'], tuple(vals), commit=True) is None:
             return
+        if tbl == 'brukere':
+            ep = self.entry_widgets['epost'].get().strip()
+            secret = pyotp.random_base32()
+            db_manager.execute_query(
+                "UPDATE brukere SET mfa_secret=%s WHERE epost=%s",
+                (secret, ep), commit=True
+            )
+            uri = pyotp.TOTP(secret).provisioning_uri(name=ep, issuer_name="Skoleapplikasjon")
+            qr_img = qrcode.make(uri)
+            win = tk.Toplevel(self.root)
+            win.title("Konfigurer 2FA")
+            win.geometry("300x350")
+            tk.Label(win, text="Skann denne QR-koden\nmed Microsoft Authenticator:",
+                     font=("Arial", 12), justify="center").pack(pady=10)
+            tk_img = ImageTk.PhotoImage(qr_img)
+            lbl = tk.Label(win, image=tk_img)
+            lbl.image = tk_img
+            lbl.pack(padx=10, pady=10)
+            ttk.Button(win, text="Ferdig", command=win.destroy).pack(pady=(0,10))
         messagebox.showinfo("Suksess", "Posten ble lagt til.")
         self.clear_form()
         self.populate_results_tree(tbl)
@@ -544,7 +585,6 @@ class SchoolDatabaseApp:
         tbl = self.table_var.get()
         info = self.tables[tbl]
         all_fields = info['fields']
-        # Finn full radiéverdier
         full_row = db_manager.execute_query(
             info['select_query'] + " WHERE " + " AND ".join(f"{f}=%s" for f in all_fields),
             tuple(self.results_tree.item(self.selected_item)['values']),
@@ -555,7 +595,6 @@ class SchoolDatabaseApp:
                 widget = self.entry_widgets[field]
                 widget.delete(0, tk.END)
                 widget.insert(0, str(full_row[i]))
-        # Oppdater detaljer
         self.on_result_select()
 
     def update_selected_record(self):
@@ -564,21 +603,19 @@ class SchoolDatabaseApp:
             messagebox.showwarning("Advarsel", "Velg og rediger rad først.")
             return
         info = self.tables[tbl]
-        fields = info['fields']
+        fields = info['fields'].copy()
         new_vals = [self.entry_widgets[f].get().strip() for f in fields if f in self.entry_widgets]
         if any(v == '' for v in new_vals):
             messagebox.showwarning("Advarsel", "Alle felt må fylles ut.")
             return
-        # Bygg WHERE på primærnøkkel (antatt alle felter)
-        old_vals = self.results_tree.item(self.selected_item)['values']
-        # Ev. drop passord i old_vals for ikke-admin
+        old_vals = list(self.results_tree.item(self.selected_item)['values'])
         if tbl=='brukere' and self.user_role!='admin':
             pass_idx = fields.index('passord')
             del fields[pass_idx]
             del old_vals[pass_idx]
         q = f"UPDATE {tbl} SET " + ",".join(f"{f}=%s" for f in fields) + \
             " WHERE " + " AND ".join(f"{f}=%s" for f in fields)
-        params = tuple(new_vals + list(old_vals))
+        params = tuple(new_vals + old_vals)
         if db_manager.execute_query(q, params, commit=True) is None:
             return
         messagebox.showinfo("Suksess", "Post oppdatert.")
@@ -611,15 +648,9 @@ class SchoolDatabaseApp:
             return
         if not messagebox.askyesno("Bekreft", f"Slette {len(sels)} poster?"):
             return
-        info = self.tables[tbl]
-        fields = info['fields']
+        fields = list(self.results_tree["columns"])
         for s in sels:
-            vals = self.results_tree.item(s)['values']
-            # Drop passord‐verdi om skjult  
-            if tbl=='brukere' and self.user_role!='admin':
-                pass_idx = fields.index('passord')
-                del fields[pass_idx]
-                del vals[pass_idx]
+            vals = list(self.results_tree.item(s)["values"])
             q = f"DELETE FROM {tbl} WHERE " + " AND ".join(f"{f}=%s" for f in fields)
             if db_manager.execute_query(q, tuple(vals), commit=True) is None:
                 return
