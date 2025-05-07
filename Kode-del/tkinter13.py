@@ -151,23 +151,11 @@ class SchoolDatabaseApp:
         # Tabellkonfigurasjon
         ##########################################
         self.tables = {
-            "admin": {
-                "fields": ["epost"],
-                "insert_query": "INSERT INTO admin (epost) VALUES (%s)",
-                "select_query": "SELECT * FROM admin",
-                "foreign_keys": {"epost": {"table": "brukere", "display_fields": ["epost"]}}
-            },
             "brukere": {
                 "fields": ["fornavn", "etternavn", "rolle_navn", "epost", "passord"],
                 "insert_query": "INSERT INTO brukere (fornavn, etternavn, rolle_navn, epost, passord) VALUES (%s, %s, %s, %s, %s)",
                 "select_query": "SELECT fornavn, etternavn, rolle_navn, epost, passord FROM brukere",
                 "foreign_keys": {"rolle_navn": {"table": "rolle", "display_fields": ["rolle_navn"]}}
-            },
-            "devices": {
-                "fields": ["epost", "device_type", "device_model"],
-                "insert_query": "INSERT INTO devices (epost, device_type, device_model) VALUES (%s, %s, %s)",
-                "select_query": "SELECT * FROM devices",
-                "foreign_keys": {"epost": {"table": "brukere", "display_fields": ["epost"]}}
             },
             "elever": {
                 "fields": ["epost", "trinn", "født"],
@@ -221,12 +209,6 @@ class SchoolDatabaseApp:
                     "epost": {"table": "brukere", "display_fields": ["epost"]}
                 }
             },
-            "kontroll": {
-                "fields": ["epost", "beskrivelse", "dato"],
-                "insert_query": "INSERT INTO kontroll (epost, beskrivelse, dato) VALUES (%s, %s, %s)",
-                "select_query": "SELECT * FROM kontroll",
-                "foreign_keys": {"epost": {"table": "brukere", "display_fields": ["epost"]}}
-            },
             "laerer": {
                 "fields": ["epost", "fag", "alder"],
                 "insert_query": "INSERT INTO laerer (epost, fag, alder) VALUES (%s, %s, %s)",
@@ -234,15 +216,6 @@ class SchoolDatabaseApp:
                 "foreign_keys": {
                     "epost": {"table": "brukere", "display_fields": ["epost"]},
                     "fag": {"table": "fag", "display_fields": ["fag_navn"]}
-                }
-            },
-            "oppgaver": {
-                "fields": ["epost", "oppgave_tekst", "fag_navn"],
-                "insert_query": "INSERT INTO oppgaver (epost, oppgave_tekst, fag_navn) VALUES (%s, %s, %s)",
-                "select_query": "SELECT * FROM oppgaver",
-                "foreign_keys": {
-                    "epost": {"table": "brukere", "display_fields": ["epost"]},
-                    "fag_navn": {"table": "fag", "display_fields": ["fag_navn"]}
                 }
             },
             "postdata": {
@@ -255,11 +228,6 @@ class SchoolDatabaseApp:
                 "fields": ["rolle_navn"],
                 "insert_query": "INSERT INTO rolle (rolle_navn) VALUES (%s)",
                 "select_query": "SELECT * FROM rolle"
-            },
-            "start": {
-                "fields": ["innstilling", "verdi"],
-                "insert_query": "INSERT INTO start (innstilling, verdi) VALUES (%s, %s)",        
-                "select_query": "SELECT * FROM start"
             }
         }
 
