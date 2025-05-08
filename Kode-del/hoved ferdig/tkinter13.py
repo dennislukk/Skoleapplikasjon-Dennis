@@ -31,12 +31,7 @@ class DatabaseManager:
                 conn.close()
 
 # Global database‐instans
-DB_CONFIG = {
-    'host': "10.10.25.50",
-    'user': "dennis",
-    'password': "dennis",
-    'database': "Skoleapplikasjon"
-}
+from config import DB_CONFIG
 db_manager = DatabaseManager(DB_CONFIG)
 
 ##########################################

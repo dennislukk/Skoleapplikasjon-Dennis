@@ -1,0 +1,11 @@
+# Ignorer config‐fil med sensitive data
+config.py
+.env
+
+# Generelle Python‐ignoreringsregler
+__pycache__/
+*.py[cod]
+*.sqlite3
+env/
+venv/
+*.egg-info/
