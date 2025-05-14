@@ -4,6 +4,7 @@ import mysql.connector
 import pyotp
 import qrcode
 from PIL import Image, ImageTk  # pip install pillow hvis ikke installert
+import config
 
 ##########################################
 # Database Manager Klasse
@@ -20,7 +21,7 @@ class DatabaseManager:
             cursor.execute(query, params)
             if commit:
                 conn.commit()
-                return True
+                return True,
             else:
                 return cursor.fetchall()
         except mysql.connector.Error as err:
@@ -31,8 +32,7 @@ class DatabaseManager:
                 conn.close()
 
 # Global database‐instans
-from config import DB_CONFIG
-db_manager = DatabaseManager(DB_CONFIG)
+db_manager = DatabaseManager(config.DB_CONFIG)
 
 ##########################################
 # Påloggingsvindu med 2FA
@@ -70,31 +70,38 @@ class LoginWindow:
 
         role, secret = res[0]
 
-        # Hvis 2FA ikke er aktivert, tilby å konfigurere nå
+        # Hvis 2FA ikke er aktivert
         if not secret:
-            if messagebox.askyesno("2FA ikke aktivert",
-                                   "Du har ikke konfigurert 2FA enda.\n\n"
-                                   "Vil du konfigurere nå?"):
-                # Generer hemmelighet, lagre i DB
+            if messagebox.askyesno(
+                "2FA ikke aktivert",
+                "Du har ikke konfigurert 2FA enda.\n\nVil du konfigurere nå?"
+            ):
+                # Generer hemmelighet og lagre i DB
                 new_secret = pyotp.random_base32()
                 db_manager.execute_query(
                     "UPDATE brukere SET mfa_secret=%s WHERE epost=%s",
                     (new_secret, user),
                     commit=True
                 )
+
                 # Lag provisioning URI og QR-kode
-                uri = pyotp.TOTP(new_secret).provisioning_uri(
+                totp = pyotp.TOTP(new_secret)
+                uri = totp.provisioning_uri(
                     name=user,
                     issuer_name="Skoleapplikasjon"
                 )
                 qr_img = qrcode.make(uri)
 
-                # Vis kun QR-kode i eget vindu
+                # Vis QR-kode i eget vindu
                 win = tk.Toplevel(self.root)
                 win.title("Konfigurer 2FA")
                 win.geometry("300x350")
-                tk.Label(win, text="Skann denne QR-koden\nmed Microsoft Authenticator:",
-                         font=("Arial", 12), justify="center").pack(pady=10)
+                tk.Label(
+                    win,
+                    text="Skann denne QR-koden\nmed Microsoft Authenticator:",
+                    font=("Arial", 12),
+                    justify="center"
+                ).pack(pady=10)
                 tk_img = ImageTk.PhotoImage(qr_img)
                 lbl = tk.Label(win, image=tk_img)
                 lbl.image = tk_img  # behold referanse
@@ -103,9 +110,11 @@ class LoginWindow:
             return
 
         # Spør om koden fra Authenticator og verifiser
-        code = simpledialog.askstring("2FA",
-                                      "Skriv inn 6-sifret kode fra Authenticator:",
-                                      parent=self.root)
+        code = simpledialog.askstring(
+            "2FA",
+            "Skriv inn 6-sifret kode fra Authenticator:",
+            parent=self.root
+        )
         if not code or not pyotp.TOTP(secret).verify(code):
             messagebox.showerror("Feil 2FA", "Ugyldig eller utløpt kode.")
             return
@@ -175,34 +184,10 @@ class SchoolDatabaseApp:
                 "insert_query": "INSERT INTO fag (fag_navn) VALUES (%s)",
                 "select_query": "SELECT * FROM fag"
             },
-            "fravaer": {
-                "fields": ["epost", "dato", "antall_timer"],
-                "insert_query": "INSERT INTO fravaer (epost, dato, antall_timer) VALUES (%s, %s, %s)",
-                "select_query": "SELECT * FROM fravaer",
-                "foreign_keys": {"epost": {"table": "brukere", "display_fields": ["epost"]}}
-            },
             "klasse": {
                 "fields": ["trinn"],
                 "insert_query": "INSERT INTO klasse (trinn) VALUES (%s)",
                 "select_query": "SELECT * FROM klasse"
-            },
-            "klasse_elev": {
-                "fields": ["klasse_navn", "epost"],
-                "insert_query": "INSERT INTO klasse_elev (klasse_navn, epost) VALUES (%s, %s)",
-                "select_query": "SELECT * FROM klasse_elev",
-                "foreign_keys": {
-                    "klasse_navn": {"table": "klasse", "display_fields": ["klasse_navn"]},
-                    "epost": {"table": "brukere", "display_fields": ["epost"]}
-                }
-            },
-            "klasse_laerer": {
-                "fields": ["klasse_navn", "epost"],
-                "insert_query": "INSERT INTO klasse_laerer (klasse_navn, epost) VALUES (%s, %s)",
-                "select_query": "SELECT * FROM klasse_laerer",
-                "foreign_keys": {
-                    "klasse_navn": {"table": "klasse", "display_fields": ["klasse_navn"]},
-                    "epost": {"table": "brukere", "display_fields": ["epost"]}
-                }
             },
             "laerer": {
                 "fields": ["epost", "fag", "alder"],
@@ -523,7 +508,8 @@ class SchoolDatabaseApp:
                 "UPDATE brukere SET mfa_secret=%s WHERE epost=%s",
                 (secret, ep), commit=True
             )
-            uri = pyotp.TOTP(secret).provisioning_uri(name=ep, issuer_name="Skoleapplikasjon")
+            totp = pyotp.TOTP(secret)
+            uri = totp.provisioning_uri(name=ep, issuer_name="Skoleapplikasjon")
             qr_img = qrcode.make(uri)
             win = tk.Toplevel(self.root)
             win.title("Konfigurer 2FA")
