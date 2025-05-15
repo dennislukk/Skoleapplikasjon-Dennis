@@ -1,5 +1,5 @@
 ('C:\\Users\\bruker\\OneDrive - Buskerud fylkeskommune\\2ITA '
- '24-25\\Utvikling\\SQL\\Skoleapplikasjon\\Skoleapplikasjon-Dennis\\kode-del\\hovedferdig\\build\\tkinter13\\PYZ-00.pyz',
+ '24-25\\Utvikling\\SQL\\Skoleapplikasjon\\Skoleapplikasjon-Dennis\\Kode-del\\hovedferdig\\build\\tkinter13\\PYZ-00.pyz',
  [('PIL', 'C:\\Python\\Lib\\site-packages\\PIL\\__init__.py', 'PYMODULE'),
   ('PIL.BlpImagePlugin',
    'C:\\Python\\Lib\\site-packages\\PIL\\BlpImagePlugin.py',
@@ -350,7 +350,7 @@
    'PYMODULE'),
   ('config',
    'C:\\Users\\bruker\\OneDrive - Buskerud fylkeskommune\\2ITA '
-   '24-25\\Utvikling\\SQL\\Skoleapplikasjon\\Skoleapplikasjon-Dennis\\kode-del\\hovedferdig\\config.py',
+   '24-25\\Utvikling\\SQL\\Skoleapplikasjon\\Skoleapplikasjon-Dennis\\Kode-del\\hovedferdig\\config.py',
    'PYMODULE'),
   ('configparser', 'C:\\Python\\Lib\\configparser.py', 'PYMODULE'),
   ('contextlib', 'C:\\Python\\Lib\\contextlib.py', 'PYMODULE'),
