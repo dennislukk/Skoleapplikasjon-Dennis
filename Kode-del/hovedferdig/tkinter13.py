@@ -164,10 +164,16 @@ class SchoolDatabaseApp:
             "elever": {
                 "fields": ["epost", "trinn", "født"],
                 "insert_query": "INSERT INTO elever (epost, trinn, født) VALUES (%s, %s, %s)",
-                "select_query": "SELECT epost, trinn, født FROM elever",
-                "foreign_keys": {
-                    "epost": {"table": "brukere", "display_fields": ["epost"]},
-                    "trinn": {"table": "klasse", "display_fields": ["trinn"]}
+                # Endret her:
+                "select_query": """
+                SELECT e.epost, e.trinn, e.født
+                FROM elever e
+                JOIN brukere b ON e.epost = b.epost
+                WHERE b.rolle_navn = 'elev'
+        """,
+        "foreign_keys": {
+            "epost": {"table": "brukere", "display_fields": ["epost"]},
+            "trinn": {"table": "klasse", "display_fields": ["trinn"]}
                 }
             },
             "elev_fag": {
@@ -269,6 +275,8 @@ class SchoolDatabaseApp:
         else:
             self.data_entry_frame = None
             self.entry_widgets = {}
+
+            
 
         # Resultater
         self.results_frame = tk.Frame(self.main_frame, bg='#f0f8ff')
