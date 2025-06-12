@@ -3,7 +3,7 @@ from tkinter import ttk, messagebox, simpledialog
 import mysql.connector
 import pyotp
 import qrcode
-from PIL import Image, ImageTk  # pip install pillow hvis ikke installert
+from PIL import Image, ImageTk  
 import config
 
 ##########################################
@@ -161,30 +161,17 @@ class SchoolDatabaseApp:
                 "select_query": "SELECT fornavn, etternavn, rolle_navn, epost, passord FROM brukere",
                 "foreign_keys": {"rolle_navn": {"table": "rolle", "display_fields": ["rolle_navn"]}}
             },
-            "elever": {
-                "fields": ["epost", "trinn", "født"],
-                "insert_query": "INSERT INTO elever (epost, trinn, født) VALUES (%s, %s, %s)",
-                # Endret her:
-                "select_query": """
-                SELECT e.epost, e.trinn, e.født
-                FROM elever e
-                JOIN brukere b ON e.epost = b.epost
-                WHERE b.rolle_navn = 'elev'
-        """,
-        "foreign_keys": {
-            "epost": {"table": "brukere", "display_fields": ["epost"]},
-            "trinn": {"table": "klasse", "display_fields": ["trinn"]}
-                }
-            },
-            "elev_fag": {
-                "fields": ["epost", "fag_navn", "karakter"],
-                "insert_query": "INSERT INTO elev_fag (epost, fag_navn, karakter) VALUES (%s, %s, %s)",
-                "select_query": "SELECT * FROM elev_fag",
-                "foreign_keys": {
-                    "epost": {"table": "brukere", "display_fields": ["epost"]},
-                    "fag_navn": {"table": "fag", "display_fields": ["fag_navn"]}
-                }
-            },
+            "karakterer": {
+    "fields": ["epost", "fag_navn", "trinn", "karakter"],
+    "insert_query": "INSERT INTO karakterer (epost, fag_navn, trinn, karakter) VALUES (%s, %s, %s, %s)",
+    "select_query": "SELECT epost, fag_navn, trinn, karakter FROM karakterer",
+    "foreign_keys": {
+        "epost":     {"table": "brukere", "display_fields": ["epost"]},
+        "fag_navn":  {"table": "fag",     "display_fields": ["fag_navn"]},
+        "trinn":     {"table": "klasse",  "display_fields": ["trinn"]}
+    }
+},
+
             "fag": {
                 "fields": ["fag_navn"],
                 "insert_query": "INSERT INTO fag (fag_navn) VALUES (%s)",
@@ -194,15 +181,6 @@ class SchoolDatabaseApp:
                 "fields": ["trinn"],
                 "insert_query": "INSERT INTO klasse (trinn) VALUES (%s)",
                 "select_query": "SELECT * FROM klasse"
-            },
-            "laerer": {
-                "fields": ["epost", "fag", "alder"],
-                "insert_query": "INSERT INTO laerer (epost, fag, alder) VALUES (%s, %s, %s)",
-                "select_query": "SELECT * FROM laerer",
-                "foreign_keys": {
-                    "epost": {"table": "brukere", "display_fields": ["epost"]},
-                    "fag": {"table": "fag", "display_fields": ["fag_navn"]}
-                }
             },
             "postdata": {
                 "fields": ["epost", "innhold", "tidspunkt"],
@@ -240,9 +218,10 @@ class SchoolDatabaseApp:
         menu = tk.Frame(self.main_frame, bg='#f0f8ff')
         menu.pack(fill=tk.X)
         tk.Label(menu, text="Tabell:", bg='#f0f8ff', font=("Arial",10,"bold")).pack(side=tk.LEFT, padx=(5,0))
+        # Begrens tabellvalg for elever til kun elev_fag
         tables_to_show = list(self.tables.keys())
         if self.user_role == 'elev':
-            tables_to_show = [t for t,v in self.tables.items() if 'epost' in v['fields']]
+            tables_to_show = ['karakterer']
         self.table_var = tk.StringVar()
         self.table_dropdown = ttk.Combobox(menu, textvariable=self.table_var,
                                            values=tables_to_show, state="readonly", width=30)
@@ -276,8 +255,6 @@ class SchoolDatabaseApp:
             self.data_entry_frame = None
             self.entry_widgets = {}
 
-            
-
         # Resultater
         self.results_frame = tk.Frame(self.main_frame, bg='#f0f8ff')
         self.results_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=5)
@@ -301,7 +278,12 @@ class SchoolDatabaseApp:
                 ("Slett valgte", self.delete_records),
                 ("Tøm skjema", self.clear_form)
             ]:
-                ttk.Button(action_frame, text=txt, command=cmd).pack(side=tk.LEFT, padx=5)
+                # Skjul delete-knapp for ikke-admin på brukere-tabellen
+                if txt == "Slett valgte" and self.user_role != 'admin':
+                    btn = ttk.Button(action_frame, text=txt, command=cmd)
+                    btn.pack(side=tk.LEFT, padx=5)
+                else:
+                    ttk.Button(action_frame, text=txt, command=cmd).pack(side=tk.LEFT, padx=5)
 
         # Detaljer‐panel
         details = ttk.LabelFrame(self.main_frame, text="Detaljer")
@@ -400,6 +382,35 @@ class SchoolDatabaseApp:
         self.populate_results_tree(tbl)
         self.status_var.set(f"Viser data for '{tbl}'.")
 
+                           # I SchoolDatabaseApp.on_table_select, erstatt delen
+        # for å hente fremmednøkkel-verdi for ent:
+        if field in fks:
+            ref = fks[field]
+            # --- NY START ---
+            # Hvis vi setter karakter, vil vi kun liste opp elever:
+            if tbl == 'karakter' and field == 'epost':
+                data = db_manager.execute_query(
+                    "SELECT epost FROM brukere WHERE rolle_navn='elev'"
+                ) or []
+                vals = [row[0] for row in data]
+                ent = ttk.Combobox(frm, values=vals, state='readonly', font=("Arial",10))
+            else:
+                # Standard-henting for andre fk-felter
+                ref_info = self.tables[ref['table']]
+                data = db_manager.execute_query(ref_info['select_query']) or []
+                idxs = [ref_info['fields'].index(df) for df in ref['display_fields']]
+                seen, vals = set(), []
+                for row in data:
+                    txt = " ".join(str(row[i]) for i in idxs)
+                    if txt not in seen:
+                        seen.add(txt)
+                        vals.append(txt)
+                ent = ttk.Combobox(frm, values=vals, state='readonly', font=("Arial",10))
+            # --- NY SLUTT ---
+        else:
+            ent = tk.Entry(frm, font=("Arial",10))
+
+
     def populate_results_tree(self, tbl):
         for item in self.results_tree.get_children():
             self.results_tree.delete(item)
@@ -421,9 +432,11 @@ class SchoolDatabaseApp:
             self.results_tree.column(c, anchor='center', width=120)
 
         rows = db_manager.execute_query(info['select_query']) or []
-        if self.user_role == 'elev' and 'epost' in all_fields:
-            epost_idx = all_fields.index('epost')
+        if self.user_role == 'elev' and tbl == 'elev_fag':
+            epost_idx = info['fields'].index('epost')
             rows = [r for r in rows if r[epost_idx] == self.current_user]
+        elif self.user_role == 'elev':
+            rows = []
 
         for r in rows:
             if pass_idx is not None:
@@ -432,6 +445,8 @@ class SchoolDatabaseApp:
 
         self.status_var.set(f"{len(rows)} poster funnet i '{tbl}'.")
         self.reselect_first_row()
+
+        
 
     def on_result_select(self, event=None):
         sels = self.results_tree.selection()
@@ -463,9 +478,11 @@ class SchoolDatabaseApp:
         self.results_tree.delete(*self.results_tree.get_children())
         info = self.tables[tbl]
         rows = db_manager.execute_query(info['select_query']) or []
-        if self.user_role == 'elev' and 'epost' in info['fields']:
+        if self.user_role == 'elev' and tbl == 'elev_fag':
             idx = info['fields'].index('epost')
             rows = [r for r in rows if r[idx] == self.current_user]
+        elif self.user_role == 'elev':
+            rows = []
         matches = [r for r in rows if any(term in str(v).lower() for v in r)]
         pass_idx = info['fields'].index('passord') if tbl=='brukere' and self.user_role!='admin' else None
         for r in matches:
@@ -483,9 +500,11 @@ class SchoolDatabaseApp:
         info = self.tables[tbl]
         q = info['select_query'] + f" ORDER BY {col} ASC"
         rows = db_manager.execute_query(q) or []
-        if self.user_role == 'elev' and 'epost' in info['fields']:
+        if self.user_role == 'elev' and tbl == 'elev_fag':
             idx = info['fields'].index('epost')
             rows = [r for r in rows if r[idx] == self.current_user]
+        elif self.user_role == 'elev':
+            rows = []
         pass_idx = info['fields'].index('passord') if tbl=='brukere' and self.user_role!='admin' else None
         self.results_tree.delete(*self.results_tree.get_children())
         for r in rows:
@@ -570,7 +589,7 @@ class SchoolDatabaseApp:
             pass_idx = fields.index('passord')
             del fields[pass_idx]
             del old_vals[pass_idx]
-        q = f"UPDATE {tbl} SET " + ",".join(f"{f}=%s" for f in fields) + \
+        q = f"UPDATE {tbl} SET " + ",".join(f"{f}=%s" for f in fields) +\
             " WHERE " + " AND ".join(f"{f}=%s" for f in fields)
         params = tuple(new_vals + old_vals)
         if db_manager.execute_query(q, params, commit=True) is None:
@@ -599,6 +618,10 @@ class SchoolDatabaseApp:
 
     def delete_records(self):
         tbl = self.table_var.get()
+        # Kun admin kan slette brukere
+        if tbl == 'brukere' and self.user_role != 'admin':
+            messagebox.showwarning("Advarsel", "Kun admin kan slette brukere.")
+            return
         sels = self.results_tree.selection()
         if not tbl or not sels:
             messagebox.showwarning("Advarsel", "Velg tabell og rader.")
