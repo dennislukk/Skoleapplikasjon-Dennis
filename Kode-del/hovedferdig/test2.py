@@ -714,16 +714,146 @@ class HaarOgBlomsterApp:
         pass
 
     def new_employee_dialog(self):
-        messagebox.showinfo("Info", "Denne funksjonen er ikke implementert ennå.")
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Ny Ansatt")
+        dialog.geometry("400x250")
+        dialog.configure(bg=self.colors['bg'])
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        frame = ttk.LabelFrame(dialog, text="Ansattinfo", padding=20)
+        frame.pack(fill='both', expand=True, padx=20, pady=20)
+
+        fields = {}
+
+        ttk.Label(frame, text="Navn:").grid(row=0, column=0, sticky='w', pady=5)
+        fields['navn'] = ttk.Entry(frame, width=25)
+        fields['navn'].grid(row=0, column=1, pady=5, padx=(10, 0))
+
+        ttk.Label(frame, text="Stilling:").grid(row=1, column=0, sticky='w', pady=5)
+        fields['stilling'] = ttk.Entry(frame, width=25)
+        fields['stilling'].grid(row=1, column=1, pady=5, padx=(10, 0))
+
+        ttk.Label(frame, text="Telefon:").grid(row=2, column=0, sticky='w', pady=5)
+        fields['telefon'] = ttk.Entry(frame, width=25)
+        fields['telefon'].grid(row=2, column=1, pady=5, padx=(10, 0))
+
+        ttk.Label(frame, text="E-post:").grid(row=3, column=0, sticky='w', pady=5)
+        fields['epost'] = ttk.Entry(frame, width=25)
+        fields['epost'].grid(row=3, column=1, pady=5, padx=(10, 0))
+
+        def save_employee():
+            if not fields['navn'].get():
+                messagebox.showerror("Feil", "Navn er påkrevd!")
+                return
+            conn = self.get_db_connection()
+            if conn:
+                try:
+                    cursor = conn.cursor()
+                    query = """INSERT INTO Ansatte (navn, stilling, telefon, epost)
+                            VALUES (%s, %s, %s, %s)"""
+                    cursor.execute(query, (
+                        fields['navn'].get(),
+                        fields['stilling'].get(),
+                        fields['telefon'].get(),
+                        fields['epost'].get()
+                    ))
+                    conn.commit()
+                    messagebox.showinfo("Suksess", "Ansatt lagt til!")
+                    dialog.destroy()
+                    self.refresh_employees()
+                except mysql.connector.Error as err:
+                    messagebox.showerror("Feil", f"Kunne ikke lagre ansatt: {err}")
+                finally:
+                    conn.close()
+
+        button_frame = tk.Frame(frame, bg=self.colors['card_bg'])
+        button_frame.grid(row=4, column=0, columnspan=2, pady=20)
+        ttk.Button(button_frame, text="Lagre", command=save_employee, style='Primary.TButton').pack(side='left', padx=(0, 10))
+        ttk.Button(button_frame, text="Avbryt", command=dialog.destroy).pack(side='left')
+
 
     def edit_employee(self):
-        messagebox.showinfo("Info", "Denne funksjonen er ikke implementert ennå.")
+        selection = self.employees_tree.selection()
+        if not selection:
+            messagebox.showwarning("Advarsel", "Velg en ansatt å redigere.")
+            return
+        item = self.employees_tree.item(selection[0])
+        values = item['values']
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Rediger Ansatt")
+        dialog.geometry("400x250")
+        dialog.configure(bg=self.colors['bg'])
+        dialog.transient(self.root)
+        dialog.grab_set()
+        frame = ttk.LabelFrame(dialog, text="Ansattinfo", padding=20)
+        frame.pack(fill='both', expand=True, padx=20, pady=20)
+        fields = {}
+        ttk.Label(frame, text="Navn:").grid(row=0, column=0, sticky='w', pady=5)
+        fields['navn'] = ttk.Entry(frame, width=25)
+        fields['navn'].insert(0, values[1])
+        fields['navn'].grid(row=0, column=1, pady=5, padx=(10, 0))
+        ttk.Label(frame, text="Stilling:").grid(row=1, column=0, sticky='w', pady=5)
+        fields['stilling'] = ttk.Entry(frame, width=25)
+        fields['stilling'].insert(0, values[2])
+        fields['stilling'].grid(row=1, column=1, pady=5, padx=(10, 0))
+        ttk.Label(frame, text="Telefon:").grid(row=2, column=0, sticky='w', pady=5)
+        fields['telefon'] = ttk.Entry(frame, width=25)
+        fields['telefon'].insert(0, values[3])
+        fields['telefon'].grid(row=2, column=1, pady=5, padx=(10, 0))
+        ttk.Label(frame, text="E-post:").grid(row=3, column=0, sticky='w', pady=5)
+        fields['epost'] = ttk.Entry(frame, width=25)
+        fields['epost'].insert(0, values[4])
+        fields['epost'].grid(row=3, column=1, pady=5, padx=(10, 0))
+        def update_employee():
+            if not fields['navn'].get():
+                messagebox.showerror("Feil", "Navn er påkrevd!")
+                return
+            conn = self.get_db_connection()
+            if conn:
+                try:
+                    cursor = conn.cursor()
+                    query = """UPDATE Ansatte SET navn=%s, stilling=%s, telefon=%s, epost=%s
+                           WHERE ansatt_id=%s"""
+                    cursor.execute(query, (
+                        fields['navn'].get(),
+                        fields['stilling'].get(),
+                        fields['telefon'].get(),
+                        fields['epost'].get(),
+                        values[0]
+                    ))
+                    conn.commit()
+                    messagebox.showinfo("Suksess", "Ansatt oppdatert!")
+                    dialog.destroy()
+                    self.refresh_employees()
+                except mysql.connector.Error as err:
+                    messagebox.showerror("Feil", f"Kunne ikke oppdatere ansatt: {err}")
+                finally:
+                    conn.close()
+        button_frame = tk.Frame(frame, bg=self.colors['card_bg'])
+        button_frame.grid(row=4, column=0, columnspan=2, pady=20)
+        ttk.Button(button_frame, text="Oppdater", command=update_employee, style='Primary.TButton').pack(side='left', padx=(0, 10))
+        ttk.Button(button_frame, text="Avbryt", command=dialog.destroy).pack(side='left')
 
     def delete_employee(self):
         messagebox.showinfo("Info", "Denne funksjonen er ikke implementert ennå.")
 
     def refresh_employees(self):
-        pass  # Du kan implementere dette senere
+        """Oppdater ansattliste"""
+        for item in self.employees_tree.get_children():
+            self.employees_tree.delete(item)
+        conn = self.get_db_connection()
+        if conn:
+            try:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM Ansatte ORDER BY navn")
+                for row in cursor.fetchall():
+                    self.employees_tree.insert('', 'end', values=row)
+            except mysql.connector.Error as err:
+                messagebox.showerror("Feil", f"Kunne ikke hente ansatte: {err}")
+            finally:
+                conn.close()
+
 
 
 if __name__ == "__main__":
